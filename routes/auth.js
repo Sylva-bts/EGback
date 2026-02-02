@@ -30,7 +30,8 @@ router.post("/register", async (req, res) => {
     res.status(201).json({ message: "Inscription réussie ✅" });
 
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Register error:', error);
+    res.status(500).json({ error: 'Erreur serveur lors de l\'inscription' });
   }
 });
 // CONNEXION
@@ -66,7 +67,8 @@ router.post("/login", async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Erreur serveur lors de la connexion' });
   }
 });
 
