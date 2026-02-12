@@ -5,6 +5,7 @@ const corsOptions = {
     const allowedOrigins = [
       "https://back-ghost-1.onrender.com",
       "https://egback-1.onrender.com",
+      "https://esacpeghost.netlify.app",
       "http://localhost:3000",
       "http://127.0.0.1:3000",
       "http://localhost:5000",
