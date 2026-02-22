@@ -2,14 +2,8 @@ const OxaPayService = require("./oxapay.service");
 const Transaction = require("../models/Transaction");
 const User = require("../models/User");
 
-// Minimum withdrawal amounts in USD
-const MIN_WITHDRAWAL = {
-    'TRX': 20,
-    'USDT': 20,
-    'BTC': 0.005,
-    'ETH': 0.02,
-    'BNB': 0.05
-};
+// Minimum withdrawal amounts in USD (unified at $0.5 USD)
+const MIN_WITHDRAWAL = 0.5;
 
 // Validate crypto address formats
 const addressValidators = {
@@ -48,10 +42,10 @@ exports.createWithdrawal = async (req, res) => {
         }
 
         // Check minimum amount
-        if (amount < MIN_WITHDRAWAL[cryptoUpper]) {
+        if (amount < MIN_WITHDRAWAL) {
             return res.status(400).json({ 
                 success: false, 
-                message: `Montant minimum: $${MIN_WITHDRAWAL[cryptoUpper]} ${cryptoUpper}` 
+                message: `Montant minimum: $${MIN_WITHDRAWAL} USD` 
             });
         }
 

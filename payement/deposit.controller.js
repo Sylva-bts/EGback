@@ -2,14 +2,8 @@ const OxaPayService = require("./oxapay.service");
 const Transaction = require("../models/Transaction");
 const { v4: uuidv4 } = require("uuid");
 
-// Minimum deposit amounts in USD
-const MIN_DEPOSIT = {
-    'TRX': 10,
-    'USDT': 10,
-    'BTC': 0.001,
-    'ETH': 0.01,
-    'BNB': 0.01
-};
+// Minimum deposit amounts in USD (unified at $0.5 USD)
+const MIN_DEPOSIT = 0.5;
 
 exports.createDeposit = async (req, res) => {
     try {
@@ -30,10 +24,10 @@ exports.createDeposit = async (req, res) => {
         const cryptoUpper = crypto.toUpperCase();
 
         // Check minimum amount
-        if (amount < MIN_DEPOSIT[cryptoUpper]) {
+        if (amount < MIN_DEPOSIT) {
             return res.status(400).json({ 
                 success: false, 
-                message: `Montant minimum: $${MIN_DEPOSIT[cryptoUpper]} ${cryptoUpper}` 
+                message: `Montant minimum: $${MIN_DEPOSIT} USD` 
             });
         }
 
