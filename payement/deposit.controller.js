@@ -10,6 +10,8 @@ exports.createDeposit = async (req, res) => {
         const { amount, crypto } = req.body;
         const userId = req.user.id;
 
+        console.log("💰 Create deposit request:", { userId, amount, crypto });
+
         // Validate amount
         if (!amount || amount <= 0) {
             return res.status(400).json({ success: false, message: "Montant invalide" });
@@ -32,6 +34,7 @@ exports.createDeposit = async (req, res) => {
         }
 
         const orderId = uuidv4();
+        console.log("📝 Order ID:", orderId);
 
         // Create invoice with OxaPay
         const invoice = await OxaPayService.createInvoice(
@@ -39,6 +42,8 @@ exports.createDeposit = async (req, res) => {
             cryptoUpper,
             orderId
         );
+
+        console.log("📄 Invoice created:", invoice.invoice_id);
 
         // Save pending transaction to database
         const transaction = new Transaction({
@@ -53,6 +58,7 @@ exports.createDeposit = async (req, res) => {
         });
 
         await transaction.save();
+        console.log("💾 Transaction saved:", transaction._id);
 
         // Return all needed info to frontend
         res.json({
@@ -70,7 +76,7 @@ exports.createDeposit = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Create deposit error:", error);
+        console.error("❌ Create deposit error:", error);
         res.status(500).json({ success: false, message: error.message });
     }
 };
