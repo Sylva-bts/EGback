@@ -3,7 +3,6 @@ const axios = require("axios");
 const BASE_URL = process.env.OXAPAY_BASE_URL || "https://api.oxapay.com";
 const MERCHANT_KEY = process.env.OXAPAY_MERCHANT_API_KEY;
 const PAYOUT_KEY = process.env.OXAPAY_PAYOUT_API_KEY;
-const WEBHOOK_URL = process.env.OXAPAY_WEBHOOK_URL;
 
 // Supported cryptocurrencies mapping
 const CRYPTO_MAP = {
@@ -14,91 +13,99 @@ const CRYPTO_MAP = {
     'BNB': 'BNB'
 };
 
-// 🔹 Validate API keys on startup
-function validateApiKeys() {
-    const errors = [];
-    
-    if (!MERCHANT_KEY) {
-        errors.push("OXAPAY_MERCHANT_API_KEY");
-    }
-    if (!PAYOUT_KEY) {
-        errors.push("OXAPAY_PAYOUT_API_KEY");
-    }
-    if (!WEBHOOK_URL) {
-        console.warn("⚠️ OXAPAY_WEBHOOK_URL not set - webhook payments may not work!");
-    }
-    
-    if (errors.length > 0) {
-        console.error("❌ Missing OxaPay environment variables:", errors.join(", "));
-        console.error("   Please add these to your .env file:");
-        console.error("   - OXAPAY_MERCHANT_API_KEY=your_merchant_key");
-        console.error("   - OXAPAY_PAYOUT_API_KEY=your_payout_key");
-        console.error("   - OXAPAY_WEBHOOK_URL=https://yourdomain.com/api/payments/webhook");
-        return false;
-    }
-    
-    console.log("✅ OxaPay API keys validated successfully");
-    return true;
-}
-
-// Validate on module load
-let apiKeysValid = validateApiKeys();
-
 class OxaPayService {
 
     // 🔹 Création facture (DÉPÔT)
     async createInvoice(amount, crypto, orderId) {
         try {
-            // Check if API keys are configured
+            // Debug: Log the request details
+            console.log("=== OxaPay Create Invoice Debug ===");
+            console.log("BASE_URL:", BASE_URL);
+            console.log("MERCHANT_KEY:", MERCHANT_KEY ? "configured (hidden)" : "NOT CONFIGURED!");
+            console.log("amount:", amount);
+            console.log("crypto:", crypto);
+            console.log("orderId:", orderId);
+            console.log("=====================================");
+
             if (!MERCHANT_KEY) {
-                throw new Error("Clé API OxaPay non configurée. Veuillez vérifier les variables d'environnement.");
+                throw new Error("OXAPAY_MERCHANT_API_KEY non configurée dans le fichier .env");
             }
 
-            const callbackUrl = WEBHOOK_URL || "https://tonsite.com/payments/webhook";
-            console.log("📤 Creating OxaPay invoice:", { amount, crypto, orderId, callbackUrl });
-
-            // OxaPay uses fiat currency for invoice, crypto amount is calculated by their system
-            const response = await axios.post(`${BASE_URL}/merchant/invoice`, {
+            // OxaPay API request with required fields
+            const requestData = {
                 merchant: MERCHANT_KEY,
-                amount: amount,
+                amount: parseFloat(amount).toFixed(2),
                 currency: 'USD', // OxaPay uses USD as base
                 order_id: orderId,
-                callback_url: callbackUrl,
-                pay_currency: CRYPTO_MAP[crypto] || 'USDT' // User will pay with selected crypto
-            }, {
-                timeout: 10000 // 10 second timeout
+                callback_url: process.env.OXAPAY_WEBHOOK_URL || "https://tonsite.com/payments/webhook",
+                pay_currency: CRYPTO_MAP[crypto] || 'USDT',
+                life_time: 900, // 15 minutes in seconds (OxaPay requirement)
+                // Additional optional fields
+                description: `Deposit order ${orderId}`,
+                fee_paid_by_payer: 0 // 0 = payer pays fee, 1 = merchant pays fee
+            };
+
+            console.log("OxaPay request data:", JSON.stringify(requestData, null, 2));
+
+            const response = await axios.post(`${BASE_URL}/merchant/invoice`, requestData, {
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                timeout: 30000 // 30 seconds timeout
             });
 
-            console.log("📥 OxaPay response:", response.data);
+            console.log("OxaPay response:", JSON.stringify(response.data, null, 2));
 
+            // Check response code - OxaPay returns code 100 for success
             if (response.data.code !== 100) {
-                const errorMsg = response.data.message || `Erreur OxaPay (code: ${response.data.code})`;
-                console.error("❌ OxaPay error:", errorMsg);
+                const errorMsg = response.data.message || response.data.result || "Erreur OxaPay";
+                console.error("OxaPay error response:", errorMsg);
                 throw new Error(errorMsg);
             }
 
             return response.data;
         } catch (error) {
-            if (error.code === 'ECONNABORTED') {
-                console.error("❌ OxaPay timeout error");
-                throw new Error("Délai d'attente dépassé. Veuillez réessayer.");
+            // Detailed error logging
+            console.error("=== OxaPay Create Invoice ERROR ===");
+            console.error("Error message:", error.message);
+            if (error.response) {
+                console.error("Response status:", error.response.status);
+                console.error("Response data:", error.response.data);
+            } else if (error.request) {
+                console.error("No response received - network error");
+                console.error("Error request:", error.request);
             }
-            if (error.response?.data?.message) {
-                console.error("❌ OxaPay API error:", error.response.data.message);
-                throw new Error(error.response.data.message);
+            console.error("=====================================");
+            
+            // Provide more helpful error message
+            if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+                throw new Error("Impossible de se connecter à OxaPay. Vérifiez votre connexion internet.");
+            } else if (error.response?.status === 401) {
+                throw new Error("Clé API OxaPay invalide. Veuillez vérifier votre OXAPAY_MERCHANT_API_KEY.");
+            } else if (error.response?.status === 403) {
+                throw new Error("Accès refusé par OxaPay. Vérifiez les permissions de votre clé API.");
+            } else {
+                throw new Error(error.response?.data?.message || error.message || "Erreur création facture OxaPay");
             }
-            console.error("❌ OxaPay createInvoice error:", error.message);
-            throw new Error(error.message || "Erreur création facture OxaPay");
         }
     }
 
     // 🔹 Vérifier statut facture
     async checkInvoiceStatus(invoiceId) {
         try {
+            console.log("Checking OxaPay invoice status:", invoiceId);
+
             const response = await axios.post(`${BASE_URL}/merchant/invoice/status`, {
                 merchant: MERCHANT_KEY,
                 invoice_id: invoiceId
+            }, {
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                timeout: 15000
             });
+
+            console.log("OxaPay status response:", JSON.stringify(response.data, null, 2));
 
             if (response.data.code !== 100) {
                 throw new Error(response.data.message || "Erreur OxaPay");
@@ -114,12 +121,30 @@ class OxaPayService {
     // 🔹 Payout (RETRAIT)
     async sendPayout(amount, crypto, address) {
         try {
+            if (!PAYOUT_KEY) {
+                throw new Error("OXAPAY_PAYOUT_API_KEY non configurée");
+            }
+
+            console.log("=== OxaPay Payout Debug ===");
+            console.log("PAYOUT_KEY:", PAYOUT_KEY ? "configured" : "NOT CONFIGURED!");
+            console.log("amount:", amount);
+            console.log("crypto:", crypto);
+            console.log("address:", address);
+            console.log("==============================");
+
             const response = await axios.post(`${BASE_URL}/payout`, {
                 key: PAYOUT_KEY,
                 amount: amount,
                 currency: CRYPTO_MAP[crypto] || 'USDT',
                 address: address
+            }, {
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                timeout: 30000
             });
+
+            console.log("OxaPay payout response:", JSON.stringify(response.data, null, 2));
 
             if (response.data.code !== 100) {
                 throw new Error(response.data.message || "Erreur OxaPay");
@@ -138,6 +163,11 @@ class OxaPayService {
             const response = await axios.post(`${BASE_URL}/payout/status`, {
                 key: PAYOUT_KEY,
                 trans_id: payoutId
+            }, {
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                timeout: 15000
             });
 
             return response.data;
