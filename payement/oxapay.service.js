@@ -13,10 +13,25 @@ const axios = require("axios");
 
 // ==================== CONFIGURATION ====================
 
-// Base URL - use custom if provided, otherwise default
-const BASE_URL = process.env.OXAPAY_BASE_URL || "https://api.oxapay.com";
+// ✅ CORRIGÉ: Extraire seulement le domaine de l'URL si OXAPAY_BASE_URL contient un chemin
+const getBaseUrl = () => {
+    const envUrl = process.env.OXAPAY_BASE_URL;
+    if (!envUrl) {
+        return "https://api.oxapay.com";
+    }
+    // Extraire le domaine (protocol + host) seulement
+    try {
+        const url = new URL(envUrl);
+        return `${url.protocol}//${url.host}`;
+    } catch (e) {
+        // Si l'URL n'est pas valide, utiliser par défaut
+        console.error(`[OxaPay] OXAPAY_BASE_URL invalide: ${envUrl}, utilisation par défaut`);
+        return "https://api.oxapay.com";
+    }
+};
 
-// ✅ CORRIGÉ: Un seul cas - toujours /v1/payment/ pour l'API standard
+const BASE_URL = getBaseUrl();
+
 // Les endpoints sont construits une seule fois au démarrage
 const ENDPOINTS = {
     createInvoice: `${BASE_URL}/v1/payment/invoice`,
