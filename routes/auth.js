@@ -49,11 +49,10 @@ router.post("/login", async (req, res) => {
     if (!isMatch)
       return res.status(400).json({ message: "Mot de passe incorrect" });
 
-    // Générer token JWT
+// Générer token JWT (sans expiration)
     const token = jwt.sign(
       { id: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: "1d" }
+      process.env.JWT_SECRET
     );
 
     res.json({

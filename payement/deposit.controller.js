@@ -7,21 +7,17 @@ const MIN_DEPOSIT = 0.5;
 
 exports.createDeposit = async (req, res) => {
     try {
-        console.log("📌 [DEPOSIT] Requête reçue - User:", req.user.id, "Amount:", req.body.amount, "Crypto:", req.body.crypto);
-        
         const { amount, crypto } = req.body;
         const userId = req.user.id;
 
         // Validate amount
         if (!amount || amount <= 0) {
-            console.log("❌ [DEPOSIT] Montant invalide:", amount);
             return res.status(400).json({ success: false, message: "Montant invalide" });
         }
 
         // Validate crypto
         const validCryptos = ['TRX', 'USDT', 'BTC', 'ETH', 'BNB'];
         if (!crypto || !validCryptos.includes(crypto.toUpperCase())) {
-            console.log("❌ [DEPOSIT] Crypto invalide:", crypto);
             return res.status(400).json({ success: false, message: "Cryptomonnaie invalide" });
         }
 
@@ -29,7 +25,6 @@ exports.createDeposit = async (req, res) => {
 
         // Check minimum amount
         if (amount < MIN_DEPOSIT) {
-            console.log("❌ [DEPOSIT] Montant trop bas:", amount, "minimum:", MIN_DEPOSIT);
             return res.status(400).json({ 
                 success: false, 
                 message: `Montant minimum: $${MIN_DEPOSIT} USD` 
@@ -37,34 +32,13 @@ exports.createDeposit = async (req, res) => {
         }
 
         const orderId = uuidv4();
-        console.log("📌 [DEPOSIT] Order ID:", orderId);
 
         // Create invoice with OxaPay
-        console.log("🔄 [DEPOSIT] Appel OxaPay pour créer la facture...");
         const invoice = await OxaPayService.createInvoice(
             amount,
             cryptoUpper,
             orderId
         );
-
-        console.log("✅ [DEPOSIT] Réponse OxaPay reçue:", JSON.stringify(invoice, null, 2));
-
-        // OxaPay peut retourner les données de différentes façons
-        // Format 1: invoice.result.pay_address (nouveau format)
-        // Format 2: invoice.pay_address (ancien format)
-        // Format 3: invoice.address (autre format)
-        
-        const payAddress = invoice.result?.pay_address || invoice.pay_address || invoice.address;
-        const payAmount = invoice.result?.pay_amount || invoice.pay_amount || invoice.amount;
-        const invoiceId = invoice.result?.invoice_id || invoice.invoice_id || invoice.result?.trackId;
-        const paymentUrl = invoice.result?.payment_url || invoice.payment_url || invoice.link;
-        const expireTime = invoice.result?.expire_time || invoice.expire_time;
-
-        // Validate required fields
-        if (!payAddress) {
-            console.error("Missing pay_address in OxaPay response:", invoice);
-            throw new Error("Réponse invalide d'OxaPay: adresse de paiement manquante");
-        }
 
         // Save pending transaction to database
         const transaction = new Transaction({
@@ -72,9 +46,9 @@ exports.createDeposit = async (req, res) => {
             type: 'deposit',
             crypto: cryptoUpper,
             amount_fiat: amount,
-            amount_crypto: payAmount,
-            address: payAddress,
-            invoice_id: invoiceId,
+            amount_crypto: invoice.pay_amount || invoice.amount,
+            address: invoice.address,
+            invoice_id: invoice.invoice_id,
             status: 'pending'
         });
 
@@ -85,12 +59,12 @@ exports.createDeposit = async (req, res) => {
             success: true,
             message: "Facture créée avec succès",
             data: {
-                invoice_id: invoiceId,
-                payment_address: payAddress,
-                amount_crypto: payAmount,
+                invoice_id: invoice.invoice_id,
+                payment_address: invoice.address,
+                amount_crypto: invoice.pay_amount || invoice.amount,
                 currency: cryptoUpper,
-                payment_url: paymentUrl,
-                expire_time: expireTime,
+                payment_url: invoice.payment_url,
+                expire_time: invoice.expire_time,
                 status: 'pending'
             }
         });

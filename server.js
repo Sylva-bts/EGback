@@ -6,6 +6,23 @@ const corsMiddleware = require("./config/cors");
 
 const app = express();
 
+// Verify critical environment variables at startup
+if (!process.env.JWT_SECRET) {
+  console.error("🔴 ERREUR: JWT_SECRET n'est pas défini dans les variables d'environnement!");
+  console.error("Veuillez définir JWT_SECRET dans votre fichier .env");
+  process.exit(1);
+}
+
+if (!process.env.OXAPAY_MERCHANT_API_KEY) {
+  console.warn("⚠️ AVERTISSEMENT: OXAPAY_MERCHANT_API_KEY non défini");
+}
+
+if (!process.env.OXAPAY_PAYOUT_API_KEY) {
+  console.warn("⚠️ AVERTISSEMENT: OXAPAY_PAYOUT_API_KEY non défini");
+}
+
+console.log("✅ Variables d'environnement chargées");
+
 // Connexion à MongoDB
 connectDB();
 
