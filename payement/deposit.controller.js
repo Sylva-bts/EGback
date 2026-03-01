@@ -7,17 +7,21 @@ const MIN_DEPOSIT = 0.5;
 
 exports.createDeposit = async (req, res) => {
     try {
+        console.log("📌 [DEPOSIT] Requête reçue - User:", req.user.id, "Amount:", req.body.amount, "Crypto:", req.body.crypto);
+        
         const { amount, crypto } = req.body;
         const userId = req.user.id;
 
         // Validate amount
         if (!amount || amount <= 0) {
+            console.log("❌ [DEPOSIT] Montant invalide:", amount);
             return res.status(400).json({ success: false, message: "Montant invalide" });
         }
 
         // Validate crypto
         const validCryptos = ['TRX', 'USDT', 'BTC', 'ETH', 'BNB'];
         if (!crypto || !validCryptos.includes(crypto.toUpperCase())) {
+            console.log("❌ [DEPOSIT] Crypto invalide:", crypto);
             return res.status(400).json({ success: false, message: "Cryptomonnaie invalide" });
         }
 
@@ -25,6 +29,7 @@ exports.createDeposit = async (req, res) => {
 
         // Check minimum amount
         if (amount < MIN_DEPOSIT) {
+            console.log("❌ [DEPOSIT] Montant trop bas:", amount, "minimum:", MIN_DEPOSIT);
             return res.status(400).json({ 
                 success: false, 
                 message: `Montant minimum: $${MIN_DEPOSIT} USD` 
@@ -32,16 +37,17 @@ exports.createDeposit = async (req, res) => {
         }
 
         const orderId = uuidv4();
+        console.log("📌 [DEPOSIT] Order ID:", orderId);
 
         // Create invoice with OxaPay
-        console.log("Creating OxaPay invoice for deposit...");
+        console.log("🔄 [DEPOSIT] Appel OxaPay pour créer la facture...");
         const invoice = await OxaPayService.createInvoice(
             amount,
             cryptoUpper,
             orderId
         );
 
-        console.log("Invoice created, response:", invoice);
+        console.log("✅ [DEPOSIT] Réponse OxaPay reçue:", JSON.stringify(invoice, null, 2));
 
         // OxaPay peut retourner les données de différentes façons
         // Format 1: invoice.result.pay_address (nouveau format)

@@ -3,16 +3,27 @@ const User = require("../models/User");
 
 exports.oxapayWebhook = async (req, res) => {
     try {
+        console.log("📥 [WEBHOOK] Requête reçue!");
+        console.log("   Headers:", req.headers);
+        console.log("   Body:", JSON.stringify(req.body, null, 2));
+
         const secret = req.headers["x-webhook-secret"];
 
+        console.log("   Secret fourni:", secret ? "Oui" : "Non");
+        console.log("   Secret attendu:", process.env.OXAPAY_WEBHOOK_SECRET ? "Configuré" : "NON CONFIGURÉ!");
+
         if (secret !== process.env.OXAPAY_WEBHOOK_SECRET) {
-            console.log("Webhook unauthorized - invalid secret");
+            console.log("❌ [WEBHOOK] Accès non autorisé - secret invalide");
+            console.log("   Reçu:", secret);
+            console.log("   Attendu:", process.env.OXAPAY_WEBHOOK_SECRET);
             return res.status(403).json({ message: "Webhook non autorisé" });
         }
 
+        console.log("✅ [WEBHOOK] Secret validé!");
+
         const { status, order_id, amount, invoice_id } = req.body;
 
-        console.log("Webhook received:", { status, order_id, invoice_id, amount });
+        console.log("📥 [WEBHOOK] Données reçues:", { status, order_id, invoice_id, amount });
 
         // Find transaction by order_id or invoice_id
         const transaction = await Transaction.findOne({

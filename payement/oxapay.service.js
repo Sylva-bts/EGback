@@ -19,25 +19,29 @@ class OxaPayService {
     async createInvoice(amount, crypto, orderId) {
         try {
             // Debug: Log the request details
-            console.log("=== OxaPay Create Invoice Debug ===");
+            console.log("=== 🔍 OxaPay Create Invoice DEBUG ===");
             console.log("BASE_URL:", BASE_URL);
-            console.log("MERCHANT_KEY:", MERCHANT_KEY ? "configured (hidden)" : "NOT CONFIGURED!");
+            console.log("MERCHANT_KEY:", MERCHANT_KEY ? "✅ Configurée" : "❌ NON CONFIGUREE!");
             console.log("amount:", amount);
             console.log("crypto:", crypto);
             console.log("orderId:", orderId);
+            console.log("WEBHOOK_URL:", process.env.OXAPAY_WEBHOOK_URL || "❌ Non configurée (utilise défaut)");
             console.log("=====================================");
 
             if (!MERCHANT_KEY) {
-                throw new Error("OXAPAY_MERCHANT_API_KEY non configurée dans le fichier .env");
+                console.error("❌ ERREUR: OXAPAY_MERCHANT_API_KEY n'est pas configurée!");
+                throw new Error("OXAPAY_MERCHANT_API_KEY non configurée. Veuillez configurer la clé API dans les variables d'environnement.");
             }
 
             // OxaPay API request with required fields
+            const callbackUrl = process.env.OXAPAY_WEBHOOK_URL || "https://tonsite.com/payments/webhook";
+            
             const requestData = {
                 merchant: MERCHANT_KEY,
                 amount: parseFloat(amount).toFixed(2),
                 currency: 'USD', // OxaPay uses USD as base
                 order_id: orderId,
-                callback_url: process.env.OXAPAY_WEBHOOK_URL || "https://tonsite.com/payments/webhook",
+                callback_url: callbackUrl,
                 pay_currency: CRYPTO_MAP[crypto] || 'USDT',
                 life_time: 900, // 15 minutes in seconds (OxaPay requirement)
                 // Additional optional fields
@@ -45,7 +49,7 @@ class OxaPayService {
                 fee_paid_by_payer: 0 // 0 = payer pays fee, 1 = merchant pays fee
             };
 
-            console.log("OxaPay request data:", JSON.stringify(requestData, null, 2));
+            console.log("📤 Envoi requête OxaPay:", JSON.stringify(requestData, null, 2));
 
             const response = await axios.post(`${BASE_URL}/merchant/invoice`, requestData, {
                 headers: {
@@ -54,38 +58,39 @@ class OxaPayService {
                 timeout: 30000 // 30 seconds timeout
             });
 
-            console.log("OxaPay response:", JSON.stringify(response.data, null, 2));
+            console.log("📥 Réponse OxaPay:", JSON.stringify(response.data, null, 2));
 
             // Check response code - OxaPay returns code 100 for success
             if (response.data.code !== 100) {
                 const errorMsg = response.data.message || response.data.result || "Erreur OxaPay";
-                console.error("OxaPay error response:", errorMsg);
+                console.error("❌ OxaPay error response:", errorMsg);
                 throw new Error(errorMsg);
             }
 
+            console.log("✅ Facture créée avec succès!");
             return response.data;
         } catch (error) {
             // Detailed error logging
-            console.error("=== OxaPay Create Invoice ERROR ===");
-            console.error("Error message:", error.message);
+            console.error("=====================================");
+            console.error("❌ ERREUR OxaPay Create Invoice:");
+            console.error("Message:", error.message);
             if (error.response) {
-                console.error("Response status:", error.response.status);
-                console.error("Response data:", error.response.data);
+                console.error("Status:", error.response.status);
+                console.error("Data:", JSON.stringify(error.response.data));
             } else if (error.request) {
-                console.error("No response received - network error");
-                console.error("Error request:", error.request);
+                console.error("Network Error: Pas de réponse reçue");
             }
             console.error("=====================================");
             
             // Provide more helpful error message
             if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-                throw new Error("Impossible de se connecter à OxaPay. Vérifiez votre connexion internet.");
+                throw new Error("❌ Impossible de se connecter à OxaPay. Vérifiez votre connexion internet.");
             } else if (error.response?.status === 401) {
-                throw new Error("Clé API OxaPay invalide. Veuillez vérifier votre OXAPAY_MERCHANT_API_KEY.");
+                throw new Error("❌ Clé API OxaPay invalide. Veuillez vérifier votre OXAPAY_MERCHANT_API_KEY.");
             } else if (error.response?.status === 403) {
-                throw new Error("Accès refusé par OxaPay. Vérifiez les permissions de votre clé API.");
+                throw new Error("❌ Accès refusé par OxaPay. Vérifiez les permissions de votre clé API.");
             } else {
-                throw new Error(error.response?.data?.message || error.message || "Erreur création facture OxaPay");
+                throw new Error(error.response?.data?.message || error.message || "❌ Erreur création facture OxaPay");
             }
         }
     }
