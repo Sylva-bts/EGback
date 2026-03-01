@@ -14,20 +14,19 @@ const axios = require("axios");
 // ==================== CONFIGURATION ====================
 
 // Base URL - use custom if provided, otherwise default
-const getBaseUrl = () => {
-    if (process.env.OXAPAY_BASE_URL) {
-        return process.env.OXAPAY_BASE_URL;
-    }
-    // Default OxaPay API base URL
-    return "https://api.oxapay.com";
+const BASE_URL = process.env.OXAPAY_BASE_URL || "https://api.oxapay.com";
+
+// ✅ CORRIGÉ: Un seul cas - toujours /v1/payment/ pour l'API standard
+// Les endpoints sont construits une seule fois au démarrage
+const ENDPOINTS = {
+    createInvoice: `${BASE_URL}/v1/payment/invoice`,
+    checkInvoiceStatus: `${BASE_URL}/v1/payment/invoice/status`,
+    sendPayout: `${BASE_URL}/v1/payout`,
+    checkPayoutStatus: `${BASE_URL}/v1/payout/status`
 };
 
-const BASE_URL = getBaseUrl();
-
-console.log(`[OxaPay] Base URL configured: ${BASE_URL}`);
-
-// Check if we're using white-label (custom domain)
-const isWhiteLabel = process.env.OXAPAY_BASE_URL && !process.env.OXAPAY_BASE_URL.includes('api.oxapay.com');
+console.log(`[OxaPay] Base URL: ${BASE_URL}`);
+console.log(`[OxaPay] Endpoints:`, ENDPOINTS);
 
 // API Keys from environment
 const getMerchantKey = () => {
@@ -110,23 +109,9 @@ class OxaPayService {
         
         try {
             console.log(`[OxaPay] Creating invoice: amount=${amount}, crypto=${crypto}, orderId=${orderId}`);
-            console.log(`[OxaPay] isWhiteLabel: ${isWhiteLabel}`);
+            console.log(`[OxaPay] Using endpoint: ${ENDPOINTS.createInvoice}`);
             
-            // Build endpoint based on configuration
-            let endpoint;
-            if (isWhiteLabel) {
-                // White-label: use custom domain directly
-                endpoint = `${BASE_URL}/v1/payment/invoice`;
-            } else if (process.env.OXAPAY_BASE_URL) {
-                // Custom URL provided
-                endpoint = `${BASE_URL}/invoice`;
-            } else {
-                // Default OxaPay API
-                endpoint = `${BASE_URL}/v1/payment/invoice`;
-            }
-            console.log(`[OxaPay] Using endpoint: ${endpoint}`);
-            
-            const response = await createAxiosInstance().post(endpoint, {
+            const response = await createAxiosInstance().post(ENDPOINTS.createInvoice, {
                 amount: parseFloat(amount),
                 currency: "USD",
                 to_currency: CRYPTO_MAP[crypto] || "USDT",
@@ -153,19 +138,9 @@ class OxaPayService {
         
         try {
             console.log(`[OxaPay] Checking invoice status: ${invoiceId}`);
+            console.log(`[OxaPay] Using endpoint: ${ENDPOINTS.checkInvoiceStatus}`);
             
-            // Build endpoint based on configuration
-            let endpoint;
-            if (isWhiteLabel) {
-                endpoint = `${BASE_URL}/v1/payment/invoice/status`;
-            } else if (process.env.OXAPAY_BASE_URL) {
-                endpoint = `${BASE_URL}/invoice/status`;
-            } else {
-                endpoint = `${BASE_URL}/v1/payment/invoice/status`;
-            }
-            console.log(`[OxaPay] Using endpoint: ${endpoint}`);
-            
-            const response = await createAxiosInstance().post(endpoint, {
+            const response = await createAxiosInstance().post(ENDPOINTS.checkInvoiceStatus, {
                 invoice_id: invoiceId
             }, {
                 headers: {
@@ -186,14 +161,9 @@ class OxaPayService {
         
         try {
             console.log(`[OxaPay] Sending payout: amount=${amount}, crypto=${crypto}, address=${address}`);
+            console.log(`[OxaPay] Using payout endpoint: ${ENDPOINTS.sendPayout}`);
             
-            // Payout endpoint - use BASE_URL or default
-            const payoutUrl = isWhiteLabel 
-                ? `${BASE_URL}/v1/payout` 
-                : (process.env.OXAPAY_BASE_URL || "https://api.oxapay.com") + "/v1/payout";
-            console.log(`[OxaPay] Using payout endpoint: ${payoutUrl}`);
-            
-            const response = await createAxiosInstance().post(payoutUrl, {
+            const response = await createAxiosInstance().post(ENDPOINTS.sendPayout, {
                 amount: parseFloat(amount),
                 currency: CRYPTO_MAP[crypto] || "USDT",
                 address: address,
@@ -218,14 +188,9 @@ class OxaPayService {
         
         try {
             console.log(`[OxaPay] Checking payout status: ${payoutId}`);
+            console.log(`[OxaPay] Using payout status endpoint: ${ENDPOINTS.checkPayoutStatus}`);
             
-            // Payout status endpoint
-            const payoutStatusUrl = isWhiteLabel 
-                ? `${BASE_URL}/v1/payout/status` 
-                : (process.env.OXAPAY_BASE_URL || "https://api.oxapay.com") + "/v1/payout/status";
-            console.log(`[OxaPay] Using payout status endpoint: ${payoutStatusUrl}`);
-            
-            const response = await createAxiosInstance().post(payoutStatusUrl, {
+            const response = await createAxiosInstance().post(ENDPOINTS.checkPayoutStatus, {
                 trans_id: payoutId
             }, {
                 headers: {
