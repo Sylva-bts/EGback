@@ -18,13 +18,16 @@ const getBaseUrl = () => {
     if (process.env.OXAPAY_BASE_URL) {
         return process.env.OXAPAY_BASE_URL;
     }
+    // Default OxaPay API base URL
     return "https://api.oxapay.com";
 };
 
 const BASE_URL = getBaseUrl();
 
-// Check if we're using white-label
-const isWhiteLabel = BASE_URL.includes('/v1/payment/');
+console.log(`[OxaPay] Base URL configured: ${BASE_URL}`);
+
+// Check if we're using white-label (custom domain)
+const isWhiteLabel = process.env.OXAPAY_BASE_URL && !process.env.OXAPAY_BASE_URL.includes('api.oxapay.com');
 
 // API Keys from environment
 const getMerchantKey = () => {
@@ -107,9 +110,20 @@ class OxaPayService {
         
         try {
             console.log(`[OxaPay] Creating invoice: amount=${amount}, crypto=${crypto}, orderId=${orderId}`);
+            console.log(`[OxaPay] isWhiteLabel: ${isWhiteLabel}`);
             
-            // Build endpoint - white-label already has full path
-            const endpoint = isWhiteLabel ? `${BASE_URL}/invoice` : `${BASE_URL}/v1/payment/invoice`;
+            // Build endpoint based on configuration
+            let endpoint;
+            if (isWhiteLabel) {
+                // White-label: use custom domain directly
+                endpoint = `${BASE_URL}/v1/payment/invoice`;
+            } else if (process.env.OXAPAY_BASE_URL) {
+                // Custom URL provided
+                endpoint = `${BASE_URL}/invoice`;
+            } else {
+                // Default OxaPay API
+                endpoint = `${BASE_URL}/v1/payment/invoice`;
+            }
             console.log(`[OxaPay] Using endpoint: ${endpoint}`);
             
             const response = await createAxiosInstance().post(endpoint, {
@@ -140,7 +154,15 @@ class OxaPayService {
         try {
             console.log(`[OxaPay] Checking invoice status: ${invoiceId}`);
             
-            const endpoint = isWhiteLabel ? `${BASE_URL}/invoice/status` : `${BASE_URL}/v1/payment/invoice/status`;
+            // Build endpoint based on configuration
+            let endpoint;
+            if (isWhiteLabel) {
+                endpoint = `${BASE_URL}/v1/payment/invoice/status`;
+            } else if (process.env.OXAPAY_BASE_URL) {
+                endpoint = `${BASE_URL}/invoice/status`;
+            } else {
+                endpoint = `${BASE_URL}/v1/payment/invoice/status`;
+            }
             console.log(`[OxaPay] Using endpoint: ${endpoint}`);
             
             const response = await createAxiosInstance().post(endpoint, {
@@ -165,9 +187,11 @@ class OxaPayService {
         try {
             console.log(`[OxaPay] Sending payout: amount=${amount}, crypto=${crypto}, address=${address}`);
             
-            // Payout always uses standard URL
-            const payoutUrl = "https://api.oxapay.com/v1/payout";
-            console.log(`[OxaPay] Using endpoint: ${payoutUrl}`);
+            // Payout endpoint - use BASE_URL or default
+            const payoutUrl = isWhiteLabel 
+                ? `${BASE_URL}/v1/payout` 
+                : (process.env.OXAPAY_BASE_URL || "https://api.oxapay.com") + "/v1/payout";
+            console.log(`[OxaPay] Using payout endpoint: ${payoutUrl}`);
             
             const response = await createAxiosInstance().post(payoutUrl, {
                 amount: parseFloat(amount),
@@ -195,8 +219,11 @@ class OxaPayService {
         try {
             console.log(`[OxaPay] Checking payout status: ${payoutId}`);
             
-            const payoutStatusUrl = "https://api.oxapay.com/v1/payout/status";
-            console.log(`[OxaPay] Using endpoint: ${payoutStatusUrl}`);
+            // Payout status endpoint
+            const payoutStatusUrl = isWhiteLabel 
+                ? `${BASE_URL}/v1/payout/status` 
+                : (process.env.OXAPAY_BASE_URL || "https://api.oxapay.com") + "/v1/payout/status";
+            console.log(`[OxaPay] Using payout status endpoint: ${payoutStatusUrl}`);
             
             const response = await createAxiosInstance().post(payoutStatusUrl, {
                 trans_id: payoutId
