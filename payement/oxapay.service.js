@@ -80,6 +80,14 @@ const CRYPTO_MAP = {
     'BNB': 'BNB'
 };
 
+const PAYOUT_NETWORK_MAP = {
+    'TRX': 'TRX',
+    'USDT': 'TRX',
+    'BTC': 'BTC',
+    'ETH': 'ETH',
+    'BNB': 'BSC'
+};
+
 // ==================== HELPER FUNCTIONS ====================
 
 const handleAxiosError = (error, context) => {
@@ -182,7 +190,7 @@ class OxaPayService {
                 amount: parseFloat(amount),
                 currency: CRYPTO_MAP[crypto] || "USDT",
                 address: address,
-                network: CRYPTO_MAP[crypto] || "TRX",
+                network: PAYOUT_NETWORK_MAP[crypto] || "TRX",
                 description: process.env.OXAPAY_PAYOUT_DESCRIPTION || `Withdrawal to ${address}`
             }, {
                 headers: {

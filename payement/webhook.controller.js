@@ -16,7 +16,11 @@ exports.oxapayWebhook = async (req, res) => {
 
         // Find transaction by order_id or invoice_id
         const transaction = await Transaction.findOne({
-            $or: [{ invoice_id: order_id }, { invoice_id: invoice_id }]
+            $or: [
+                { order_id },
+                { invoice_id },
+                { invoice_id: order_id }
+            ]
         });
 
         if (!transaction) {
@@ -27,7 +31,7 @@ exports.oxapayWebhook = async (req, res) => {
         if (status === "Paid" || status === "Completed") {
             // Credit user balance
             const user = await User.findById(transaction.user);
-            
+
             if (user && transaction.status !== 'paid' && transaction.status !== 'completed') {
                 // Update transaction status
                 transaction.status = 'paid';

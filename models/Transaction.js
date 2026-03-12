@@ -26,7 +26,13 @@ const transactionSchema = new mongoose.Schema({
     address: {
         type: String
     },
+    order_id: {
+        type: String
+    },
     invoice_id: {
+        type: String
+    },
+    payout_id: {
         type: String
     },
     status: {

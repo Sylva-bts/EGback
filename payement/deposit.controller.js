@@ -25,9 +25,9 @@ exports.createDeposit = async (req, res) => {
 
         // Check minimum amount
         if (amount < MIN_DEPOSIT) {
-            return res.status(400).json({ 
-                success: false, 
-                message: `Montant minimum: $${MIN_DEPOSIT} USD` 
+            return res.status(400).json({
+                success: false,
+                message: `Montant minimum: $${MIN_DEPOSIT} USD`
             });
         }
 
@@ -49,6 +49,7 @@ exports.createDeposit = async (req, res) => {
             amount_crypto: invoice.pay_amount || invoice.amount,
             address: invoice.address,
             invoice_id: invoice.invoice_id,
+            order_id: orderId,
             status: 'pending'
         });
 
@@ -59,6 +60,8 @@ exports.createDeposit = async (req, res) => {
             success: true,
             message: "Facture créée avec succès",
             data: {
+                transaction_id: transaction._id,
+                order_id: orderId,
                 invoice_id: invoice.invoice_id,
                 payment_address: invoice.address,
                 amount_crypto: invoice.pay_amount || invoice.amount,
@@ -79,15 +82,15 @@ exports.createDeposit = async (req, res) => {
 exports.checkDepositStatus = async (req, res) => {
     try {
         const { invoice_id } = req.params;
-        
+
         if (!invoice_id) {
             return res.status(400).json({ success: false, message: "Invoice ID requis" });
         }
 
         // Find transaction in database
-        const transaction = await Transaction.findOne({ 
-            invoice_id: invoice_id,
-            user: req.user.id 
+        const transaction = await Transaction.findOne({
+            $or: [{ invoice_id }, { order_id: invoice_id }],
+            user: req.user.id
         });
 
         if (!transaction) {
@@ -109,8 +112,8 @@ exports.checkDepositStatus = async (req, res) => {
 
         // Check with OxaPay
         try {
-            const invoiceStatus = await OxaPayService.checkInvoiceStatus(invoice_id);
-            
+            const invoiceStatus = await OxaPayService.checkInvoiceStatus(transaction.invoice_id || invoice_id);
+
             // Map OxaPay status to our status
             let newStatus = transaction.status;
             if (invoiceStatus.status === 'Paid' || invoiceStatus.status === 'Completed') {
