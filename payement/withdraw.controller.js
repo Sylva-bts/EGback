@@ -43,23 +43,23 @@ exports.createWithdrawal = async (req, res) => {
 
         // Check minimum amount
         if (amount < MIN_WITHDRAWAL) {
-            return res.status(400).json({ 
-                success: false, 
-                message: `Montant minimum: $${MIN_WITHDRAWAL} USD` 
+            return res.status(400).json({
+                success: false,
+                message: `Montant minimum: $${MIN_WITHDRAWAL} USD`
             });
         }
 
         // Get user and check balance
         const user = await User.findById(userId);
-        
+
         if (!user) {
             return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
         }
 
         if (user.balance < amount) {
-            return res.status(400).json({ 
-                success: false, 
-                message: `Solde insuffisant. Solde actuel: $${user.balance.toFixed(2)}` 
+            return res.status(400).json({
+                success: false,
+                message: `Solde insuffisant. Solde actuel: $${user.balance.toFixed(2)}`
             });
         }
 
@@ -82,7 +82,8 @@ exports.createWithdrawal = async (req, res) => {
                 crypto: cryptoUpper,
                 amount_fiat: amount,
                 address: address,
-                invoice_id: payout.trans_id || payout.order_id,
+                payout_id: payout.trans_id || payout.track_id || payout.payout_id,
+                invoice_id: payout.trans_id || payout.track_id || payout.payout_id,
                 status: 'pending',
                 transaction_hash: payout.txid
             });
@@ -94,7 +95,7 @@ exports.createWithdrawal = async (req, res) => {
                 message: "Retrait en cours de traitement",
                 data: {
                     transaction_id: transaction._id,
-                    payout_id: payout.trans_id,
+                    payout_id: transaction.payout_id,
                     amount: amount,
                     crypto: cryptoUpper,
                     address: address,
@@ -120,15 +121,15 @@ exports.createWithdrawal = async (req, res) => {
 exports.checkWithdrawalStatus = async (req, res) => {
     try {
         const { transaction_id } = req.params;
-        
+
         if (!transaction_id) {
             return res.status(400).json({ success: false, message: "Transaction ID requis" });
         }
 
         // Find transaction in database
-        const transaction = await Transaction.findOne({ 
+        const transaction = await Transaction.findOne({
             _id: transaction_id,
-            user: req.user.id 
+            user: req.user.id
         });
 
         if (!transaction) {
@@ -149,17 +150,18 @@ exports.checkWithdrawalStatus = async (req, res) => {
         }
 
         // Check with OxaPay if we have a payout ID
-        if (transaction.invoice_id) {
+        const payoutId = transaction.payout_id || transaction.invoice_id;
+        if (payoutId) {
             try {
-                const payoutStatus = await OxaPayService.checkPayoutStatus(transaction.invoice_id);
-                
+                const payoutStatus = await OxaPayService.checkPayoutStatus(payoutId);
+
                 // Map OxaPay status to our status
                 let newStatus = transaction.status;
                 if (payoutStatus.status === 'Completed' || payoutStatus.status === 'Success') {
                     newStatus = 'completed';
                 } else if (payoutStatus.status === 'Rejected' || payoutStatus.status === 'Failed') {
                     newStatus = 'rejected';
-                    
+
                     // Refund balance if rejected
                     if (transaction.status === 'pending') {
                         const user = await User.findById(transaction.user);
