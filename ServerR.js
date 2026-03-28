@@ -55,15 +55,14 @@ if (process.env.ADMIN_PANEL_LANDING === "true") {
 }
 
 // Routes
+app.get("/api/health", (req, res) => {
+  res.json({ status: "OK", timestamp: new Date().toISOString() });
+});
+
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/admin", require("./routes/admin"));
 app.use("/api/payments", require("./routes/payments"));
 app.use("/api", require("./routes/game"));
-
-// Health check
-app.get("/api/health", (req, res) => {
-  res.json({ status: "OK", timestamp: new Date().toISOString() });
-});
 
 // 404 handler
 app.use((req, res) => {

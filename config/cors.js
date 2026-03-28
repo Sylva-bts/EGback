@@ -19,7 +19,10 @@ const defaultAllowedOrigins = [
 
 const envAllowedOrigins = [
   ...parseOrigins(process.env.CORS_ORIGINS),
-  ...parseOrigins(process.env.CORS_ORIGIN)
+  ...parseOrigins(process.env.CORS_ORIGIN),
+  ...parseOrigins(process.env.FRONTEND_URL),
+  ...parseOrigins(process.env.PUBLIC_APP_URL),
+  ...parseOrigins(process.env.PUBLIC_BASE_URL)
 ];
 
 const allowedOrigins = Array.from(new Set([
