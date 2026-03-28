@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
+const User = require("../models/User");
 
-module.exports = (req, res, next) => {
+module.exports = async (req, res, next) => {
   // Check if JWT_SECRET is configured
   if (!process.env.JWT_SECRET) {
     console.error("[Auth] ERREUR: JWT_SECRET n'est pas configuré dans les variables d'environnement!");
@@ -40,8 +41,19 @@ module.exports = (req, res, next) => {
       return res.status(401).json({ message: "Token invalide - Pas d'ID utilisateur" });
     }
     
+    const user = await User.findById(decoded.id).select("_id isBanned");
+    if (!user) {
+      return res.status(401).json({ message: "Utilisateur introuvable" });
+    }
+
+    if (user.isBanned) {
+      return res.status(403).json({ message: "Compte suspendu par un administrateur" });
+    }
+
+    await User.updateOne({ _id: user._id }, { $set: { lastSeenAt: new Date() } });
+
     // Attach user to request
-    req.user = { id: decoded.id };
+    req.user = { id: user._id };
     console.log("[Auth] Utilisateur authentifié:", req.user.id);
     
     next();

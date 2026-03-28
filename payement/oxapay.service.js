@@ -31,6 +31,8 @@ const getBaseUrl = () => {
 };
 
 const BASE_URL = getBaseUrl();
+const CALLBACK_URL = String(process.env.OXAPAY_CALLBACK_URL || "").trim();
+const RETURN_URL = String(process.env.OXAPAY_RETURN_URL || "").trim();
 
 // Les endpoints sont construits une seule fois au démarrage
 const ENDPOINTS = {
@@ -80,6 +82,14 @@ const CRYPTO_MAP = {
     'BNB': 'BNB'
 };
 
+const NETWORK_MAP = {
+    TRX: 'Tron',
+    USDT: 'TRC20',
+    BTC: 'Bitcoin',
+    ETH: 'Ethereum',
+    BNB: 'BSC'
+};
+
 // ==================== HELPER FUNCTIONS ====================
 
 const handleAxiosError = (error, context) => {
@@ -104,7 +114,10 @@ const handleAxiosError = (error, context) => {
             throw new Error("Trop de requêtes vers OxaPay (429) - Veuillez patienter");
         }
         
-        const message = data?.message || data?.error || `Erreur OxaPay: ${status}`;
+        const rawMessage = data?.message || data?.error || `Erreur OxaPay: ${status}`;
+        const message = String(rawMessage || "").toLowerCase().includes("there was an issue with the submitted data")
+            ? "OxaPay a refuse la demande. Verifiez la cle Payout, la 2FA du compte OxaPay, les IP autorisees, les limites de transfert et l'adresse USDT TRC20."
+            : rawMessage;
         throw new Error(message);
     }
     
@@ -113,6 +126,13 @@ const handleAxiosError = (error, context) => {
     }
     
     throw new Error(`Erreur OxaPay: ${error.message}`);
+};
+
+const normalizeApiPayload = (payload) => {
+    if (!payload || typeof payload !== "object") {
+        return {};
+    }
+    return payload.data && typeof payload.data === "object" ? payload.data : payload;
 };
 
 // ==================== OXA PAY SERVICE CLASS ====================
@@ -126,22 +146,41 @@ class OxaPayService {
             console.log(`[OxaPay] Creating invoice: amount=${amount}, crypto=${crypto}, orderId=${orderId}`);
             console.log(`[OxaPay] Using endpoint: ${ENDPOINTS.createInvoice}`);
             
-            const response = await createAxiosInstance().post(ENDPOINTS.createInvoice, {
-                amount: parseFloat(amount),
+            const payload = {
+                amount: Number(parseFloat(amount).toFixed(2)),
                 currency: "USD",
                 to_currency: CRYPTO_MAP[crypto] || "USDT",
                 order_id: orderId,
-                lifetime: parseInt(process.env.OXAPAY_INVOICE_LIFETIME) || 30,
-                fee_paid_by_payer: process.env.OXAPAY_FEE_PAID_BY_PAYER === 'true',
+                lifetime: parseInt(process.env.OXAPAY_INVOICE_LIFETIME || "30", 10),
+                fee_paid_by_payer: process.env.OXAPAY_FEE_PAID_BY_PAYER === "true" ? 1 : 0,
+                under_paid_coverage: 0,
+                mixed_payment: false,
                 description: process.env.OXAPAY_INVOICE_DESCRIPTION || `Deposit order ${orderId}`
-            }, {
+            };
+
+            if (CALLBACK_URL) {
+                payload.callback_url = CALLBACK_URL;
+            }
+            if (RETURN_URL) {
+                payload.return_url = RETURN_URL;
+            }
+
+            const response = await createAxiosInstance().post(ENDPOINTS.createInvoice, payload, {
                 headers: {
                     merchant_api_key: getMerchantKey()
                 }
             });
 
-            console.log(`[OxaPay] Invoice created successfully:`, response.data);
-            return response.data;
+            const raw = response.data || {};
+            const normalized = raw.data || raw;
+
+            if (!normalized.payment_url) {
+                console.error("[OxaPay] Invalid invoice response:", raw);
+                throw new Error(raw.message || "OxaPay n'a pas renvoye de lien de paiement");
+            }
+
+            console.log(`[OxaPay] Invoice created successfully:`, normalized);
+            return normalized;
             
         } catch (error) {
             throw handleAxiosError(error, context);
@@ -171,27 +210,36 @@ class OxaPayService {
         }
     }
 
-    async sendPayout(amount, crypto, address) {
+    async sendPayout(amount, crypto, address, orderId = "") {
         const context = "sendPayout";
         
         try {
             console.log(`[OxaPay] Sending payout: amount=${amount}, crypto=${crypto}, address=${address}`);
             console.log(`[OxaPay] Using payout endpoint: ${ENDPOINTS.sendPayout}`);
-            
-            const response = await createAxiosInstance().post(ENDPOINTS.sendPayout, {
-                amount: parseFloat(amount),
+
+            const payload = {
+                amount: Number(parseFloat(amount).toFixed(8)),
                 currency: CRYPTO_MAP[crypto] || "USDT",
-                address: address,
-                network: CRYPTO_MAP[crypto] || "TRX",
-                description: process.env.OXAPAY_PAYOUT_DESCRIPTION || `Withdrawal to ${address}`
-            }, {
+                address: String(address || '').trim(),
+                network: NETWORK_MAP[crypto] || "TRX",
+                description: process.env.OXAPAY_PAYOUT_DESCRIPTION || `Withdrawal to ${String(address || '').trim()}`
+            };
+
+            if (String(orderId || "").trim()) {
+                payload.order_id = String(orderId).trim();
+            }
+
+            const response = await createAxiosInstance().post(ENDPOINTS.sendPayout, payload, {
                 headers: {
                     payout_api_key: getPayoutKey()
                 }
             });
 
-            console.log(`[OxaPay] Payout sent successfully:`, response.data);
-            return response.data;
+            const raw = response.data || {};
+            const normalized = normalizeApiPayload(raw);
+
+            console.log(`[OxaPay] Payout sent successfully:`, normalized);
+            return normalized;
             
         } catch (error) {
             throw handleAxiosError(error, context);
@@ -202,19 +250,27 @@ class OxaPayService {
         const context = "checkPayoutStatus";
         
         try {
-            console.log(`[OxaPay] Checking payout status: ${payoutId}`);
+            const normalizedPayoutId = String(payoutId || "").trim();
+
+            console.log(`[OxaPay] Checking payout status: ${normalizedPayoutId}`);
             console.log(`[OxaPay] Using payout status endpoint: ${ENDPOINTS.checkPayoutStatus}`);
-            
+
             const response = await createAxiosInstance().post(ENDPOINTS.checkPayoutStatus, {
-                trans_id: payoutId
+                track_id: normalizedPayoutId,
+                payout_id: normalizedPayoutId,
+                trans_id: normalizedPayoutId,
+                order_id: normalizedPayoutId
             }, {
                 headers: {
                     payout_api_key: getPayoutKey()
                 }
             });
 
-            console.log(`[OxaPay] Payout status:`, response.data);
-            return response.data;
+            const raw = response.data || {};
+            const normalized = normalizeApiPayload(raw);
+
+            console.log(`[OxaPay] Payout status:`, normalized);
+            return normalized;
             
         } catch (error) {
             throw handleAxiosError(error, context);

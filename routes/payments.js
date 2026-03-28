@@ -4,6 +4,7 @@ const authMiddleware = require("../middleware/authMiddleware");
 const depositController = require("../payement/deposit.controller");
 const withdrawController = require("../payement/withdraw.controller");
 const webhookController = require("../payement/webhook.controller");
+const { getOxaPayDiagnostics } = require("../utils/oxapayDiagnostics");
 
 // ==================== WEBHOOK (NO AUTH) ====================
 // POST /api/payments/webhook - OxaPay webhook callback
@@ -30,6 +31,13 @@ router.get("/withdraw/:transaction_id", withdrawController.checkWithdrawalStatus
 
 // ==================== USER BALANCE ====================
 
+router.get("/config-check", (req, res) => {
+    res.json({
+        success: true,
+        data: getOxaPayDiagnostics()
+    });
+});
+
 // GET /api/payments/balance - Get user balance
 router.get("/balance", async (req, res) => {
     try {
@@ -44,7 +52,9 @@ router.get("/balance", async (req, res) => {
             success: true,
             data: {
                 balance: user.balance,
-                currency: "USD"
+                currency: "USD",
+                affiliateLockedBalance: Number((user.affiliateLockedBalance || 0).toFixed(2)),
+                withdrawableBalance: Number(Math.max(0, (user.balance || 0) - (user.affiliateLockedBalance || 0)).toFixed(2))
             }
         });
     } catch (error) {

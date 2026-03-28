@@ -1,5 +1,10 @@
 const Transaction = require("../models/Transaction");
 const User = require("../models/User");
+const depositController = require("./deposit.controller");
+
+function normalizeWebhookStatus(status) {
+    return String(status || "").trim().toLowerCase();
+}
 
 exports.oxapayWebhook = async (req, res) => {
     try {
@@ -7,16 +12,20 @@ exports.oxapayWebhook = async (req, res) => {
 
         if (secret !== process.env.OXAPAY_WEBHOOK_SECRET) {
             console.log("Webhook unauthorized - invalid secret");
-            return res.status(403).json({ message: "Webhook non autorisé" });
+            return res.status(403).json({ message: "Webhook non autorise" });
         }
 
         const { status, order_id, amount, invoice_id } = req.body;
+        const normalizedStatus = normalizeWebhookStatus(status);
 
         console.log("Webhook received:", { status, order_id, invoice_id, amount });
 
-        // Find transaction by order_id or invoice_id
         const transaction = await Transaction.findOne({
-            $or: [{ invoice_id: order_id }, { invoice_id: invoice_id }]
+            $or: [
+                { order_id: order_id },
+                { invoice_id: order_id },
+                { invoice_id: invoice_id }
+            ]
         });
 
         if (!transaction) {
@@ -24,39 +33,43 @@ exports.oxapayWebhook = async (req, res) => {
             return res.status(200).send("OK");
         }
 
-        if (status === "Paid" || status === "Completed") {
-            // Credit user balance
+        if (normalizedStatus === "paid" || normalizedStatus === "completed") {
             const user = await User.findById(transaction.user);
-            
-            if (user && transaction.status !== 'paid' && transaction.status !== 'completed') {
-                // Update transaction status
-                transaction.status = 'paid';
-                transaction.amount_crypto = amount || transaction.amount_crypto;
-                transaction.updatedAt = new Date();
-                await transaction.save();
 
-                // Credit balance
-                user.balance += transaction.amount_fiat;
-                await user.save();
+            if (user && transaction.status !== "paid" && transaction.status !== "completed") {
+                if (transaction.type === "deposit") {
+                    await depositController.applyConfirmedDeposit(transaction._id, amount || transaction.amount_crypto);
+                } else {
+                    transaction.status = "paid";
+                    transaction.amount_crypto = amount || transaction.amount_crypto;
+                    transaction.updatedAt = new Date();
+                    await transaction.save();
 
-                console.log(`✅ Balance credited: $${transaction.amount_fiat} for user ${user.email}`);
+                    if (transaction.type === "power_purchase" && transaction.powerKey) {
+                    user.powers[transaction.powerKey] = (user.powers?.[transaction.powerKey] || 0) + (transaction.powerUnits || 0);
+                    } else {
+                        user.balance += transaction.amount_fiat;
+                    }
+
+                    await user.save();
+                }
+                console.log(`Payment confirmed for user ${user.email} (${transaction.type})`);
             }
-        } else if (status === "Expired") {
-            transaction.status = 'expired';
+        } else if (normalizedStatus === "expired") {
+            transaction.status = "expired";
             transaction.updatedAt = new Date();
             await transaction.save();
             console.log("Invoice expired:", order_id || invoice_id);
-        } else if (status === "Failed") {
-            transaction.status = 'failed';
+        } else if (normalizedStatus === "failed") {
+            transaction.status = "failed";
             transaction.updatedAt = new Date();
             await transaction.save();
             console.log("Invoice failed:", order_id || invoice_id);
         }
 
-        res.status(200).send("OK");
-
+        return res.status(200).send("OK");
     } catch (error) {
         console.error("Webhook error:", error);
-        res.status(500).send("Erreur webhook");
+        return res.status(500).send("Erreur webhook");
     }
 };
