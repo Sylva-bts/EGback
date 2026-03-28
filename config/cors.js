@@ -10,7 +10,7 @@ function parseOrigins(value) {
 const defaultAllowedOrigins = [
   "https://back-ghost-1.onrender.com",
   "https://egback-1.onrender.com",
-  "https://esacpeghost.netlify.app",
+  "https://escapeghostgame.netlify.app",
   "http://localhost:3000",
   "http://127.0.0.1:3000",
   "http://localhost:5000",
@@ -40,7 +40,7 @@ const corsOptions = {
   },
   credentials: true,
   optionsSuccessStatus: 200,
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
 };
 
